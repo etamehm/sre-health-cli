@@ -1,0 +1,18 @@
+# sre-health-cli configuration
+# Add your endpoints here. Each target needs a name and url.
+# Optional: timeout (seconds), check_ssl (true/false)
+
+targets:
+  - name: Google
+    url: https://www.google.com
+    timeout: 5
+
+  - name: GitHub
+    url: https://github.com
+    timeout: 5
+    check_ssl: true
+
+  - name: Example (HTTP)
+    url: http://example.com
+    timeout: 3
+    check_ssl: false
