@@ -1,18 +1,21 @@
-# sre-health-cli configuration
-# Add your endpoints here. Each target needs a name and url.
-# Optional: timeout (seconds), check_ssl (true/false)
-
 targets:
-  - name: Google
-    url: https://www.google.com
-    timeout: 5
-
   - name: GitHub
     url: https://github.com
     timeout: 5
     check_ssl: true
 
-  - name: Example (HTTP)
-    url: http://example.com
-    timeout: 3
-    check_ssl: false
+  - name: Google
+    url: https://www.google.com
+    timeout: 5
+    check_ssl: true
+
+  - name: Example API
+    url: https://httpbin.org/status/200
+    timeout: 5
+    check_ssl: true
+
+# Global alerting thresholds (applied to all targets unless overridden per target)
+thresholds:
+  response_ms: 2000       # WARN if response time exceeds this (ms)
+  ssl_days_left: 30       # WARN if SSL cert expires within this many days
+  http_status: 400        # WARN if status code >= this value

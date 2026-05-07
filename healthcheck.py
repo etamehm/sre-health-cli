@@ -23,10 +23,29 @@ import yaml
 
 
 def load_config(path):
-    """Load targets from YAML config file."""
+    """Load targets and thresholds from YAML config file."""
     with open(path) as f:
         config = yaml.safe_load(f)
-    return config.get("targets", [])
+    targets = config.get("targets", [])
+    thresholds = config.get("thresholds", {})
+    return targets, thresholds
+
+
+def check_thresholds(result, thresholds):
+    """Return list of threshold breach messages for a result, or empty list."""
+    breaches = []
+    if not thresholds:
+        return breaches
+    if result["error"]:
+        breaches.append(f"FAIL: {result['error']}")
+        return breaches
+    if result["status"] and result["status"] >= thresholds.get("http_status", 400):
+        breaches.append(f"HTTP {result['status']}")
+    if result["response_ms"] and result["response_ms"] > thresholds.get("response_ms", 2000):
+        breaches.append(f"SLOW {result['response_ms']}ms")
+    if result["ssl_days_left"] is not None and result["ssl_days_left"] < thresholds.get("ssl_days_left", 30):
+        breaches.append(f"SSL {result['ssl_days_left']}d")
+    return breaches
 
 
 def check_ssl_expiry(hostname):
@@ -87,7 +106,7 @@ def check_target(target):
 
 def format_table(results):
     """Format results as a human-readable terminal table."""
-    header = f"{'NAME':<20} {'STATUS':>6} {'RESP(ms)':>9} {'SSL EXPIRY':>12} {'SSL DAYS':>9} {'ERROR'}"
+    header = f"{'NAME':<20} {'STATUS':>6} {'RESP(ms)':>9} {'SSL EXPIRY':>12} {'SSL DAYS':>9} {'ALERTS'}"
     lines = [header, "-" * len(header)]
 
     for r in results:
@@ -95,15 +114,9 @@ def format_table(results):
         resp = str(r["response_ms"]) if r["response_ms"] is not None else "-"
         ssl_exp = r["ssl_expiry"] or "-"
         ssl_days = str(r["ssl_days_left"]) if r["ssl_days_left"] is not None else "-"
-        error = r["error"] or ""
+        alerts = " | ".join(r.get("breaches", [])) if r.get("breaches") else "OK"
 
-        # Colour hints: red for errors, yellow for slow or expiring SSL
-        if r["error"]:
-            status = f"FAIL"
-        elif r["status"] and r["status"] >= 400:
-            status = f"{r['status']}!"
-
-        lines.append(f"{r['name']:<20} {status:>6} {resp:>9} {ssl_exp:>12} {ssl_days:>9} {error}")
+        lines.append(f"{r['name']:<20} {status:>6} {resp:>9} {ssl_exp:>12} {ssl_days:>9} {alerts}")
 
     return "\n".join(lines)
 
@@ -142,7 +155,7 @@ def main():
                         help="Output format (default: table)")
     args = parser.parse_args()
 
-    targets = load_config(args.config)
+    targets, thresholds = load_config(args.config)
     if not targets:
         print("No targets found in config. Add endpoints to config.yaml")
         sys.exit(1)
@@ -150,10 +163,18 @@ def main():
     print(f"Checking {len(targets)} targets...\n")
     results = [check_target(t) for t in targets]
 
+    # Attach threshold breaches to each result
+    for r in results:
+        r["breaches"] = check_thresholds(r, thresholds)
+
     if args.format == "prometheus":
         print(format_prometheus(results))
     else:
         print(format_table(results))
+
+    # Exit 1 if any breaches - useful for CI/scripting
+    if any(r["breaches"] for r in results):
+        sys.exit(1)
 
 
 if __name__ == "__main__":
